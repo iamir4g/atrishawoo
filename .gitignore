@@ -1,3 +1,5 @@
 .history
-./history
+.history/
+history
+history/
 .DS_Store
