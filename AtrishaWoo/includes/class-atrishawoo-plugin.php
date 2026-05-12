@@ -32,9 +32,9 @@ final class AtrishaWoo_Plugin {
 		}
 
 		require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-sku-generator.php';
+		require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-order-label.php';
 		require_once ATRISHAWOO_PATH . 'admin/class-atrishawoo-admin.php';
 
 		AtrishaWoo_Admin::instance()->init();
 	}
 }
-
