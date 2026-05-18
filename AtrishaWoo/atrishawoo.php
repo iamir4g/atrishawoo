@@ -18,6 +18,22 @@ define('ATRISHAWOO_URL', plugin_dir_url(__FILE__));
 
 require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-plugin.php';
 
+register_activation_hook(__FILE__, static function () {
+	if (!class_exists('WooCommerce')) {
+		return;
+	}
+
+	require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-recommendation-engine.php';
+	AtrishaWoo_Recommendation_Engine::install();
+});
+
+register_deactivation_hook(__FILE__, static function () {
+	$timestamp = wp_next_scheduled('atrishawoo_reco_backfill');
+	if ($timestamp) {
+		wp_unschedule_event($timestamp, 'atrishawoo_reco_backfill');
+	}
+});
+
 add_action('plugins_loaded', static function () {
 	AtrishaWoo_Plugin::instance()->init();
 });
