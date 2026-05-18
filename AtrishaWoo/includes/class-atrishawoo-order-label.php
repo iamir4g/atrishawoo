@@ -131,6 +131,13 @@ final class AtrishaWoo_Order_Label {
 		$settings['height_mm'] = self::clamp_int((int) $settings['height_mm'], 10, 200);
 		$settings['padding_mm'] = self::clamp_int((int) $settings['padding_mm'], 0, 20);
 		$settings['font_size_pt'] = self::clamp_int((int) $settings['font_size_pt'], 6, 24);
+		$settings['line_height'] = self::clamp_float((float) $settings['line_height'], 0.8, 3.0);
+		$settings['font_weight'] = isset($settings['font_weight']) ? (string) $settings['font_weight'] : 'normal';
+		$settings['font_weight'] = $settings['font_weight'] === 'bold' ? 'bold' : 'normal';
+		$settings['font_style'] = isset($settings['font_style']) ? (string) $settings['font_style'] : 'normal';
+		$settings['font_style'] = $settings['font_style'] === 'italic' ? 'italic' : 'normal';
+		$settings['word_spacing_px'] = self::clamp_float((float) ($settings['word_spacing_px'] ?? 0.0), 0.0, 20.0);
+		$settings['letter_spacing_px'] = self::clamp_float((float) ($settings['letter_spacing_px'] ?? 0.0), -2.0, 10.0);
 
 		$settings['template_text'] = isset($settings['template_text']) ? (string) $settings['template_text'] : '';
 		$settings['template_text'] = trim(str_replace(["\r\n", "\r"], "\n", $settings['template_text']));
@@ -173,6 +180,10 @@ final class AtrishaWoo_Order_Label {
 			'{orderid}' => 'شماره سفارش',
 			'{orderdate}' => 'تاریخ سفارش',
 			'{items}' => 'اقلام سفارش',
+			'{productnames}' => 'نام محصولات (فهرست)',
+			'{firstproduct}' => 'نام اولین محصول',
+			'{itemcount}' => 'تعداد ردیف کالا',
+			'{totalqty}' => 'جمع تعداد اقلام',
 			'{customernote}' => 'یادداشت مشتری',
 			'{total}' => 'مبلغ کل',
 		];
@@ -198,6 +209,11 @@ final class AtrishaWoo_Order_Label {
 		$height = (int) $settings['height_mm'];
 		$padding = (int) $settings['padding_mm'];
 		$font_size = (int) $settings['font_size_pt'];
+		$line_height = (float) $settings['line_height'];
+		$font_weight = (string) ($settings['font_weight'] ?? 'normal');
+		$font_style = (string) ($settings['font_style'] ?? 'normal');
+		$word_spacing = (float) ($settings['word_spacing_px'] ?? 0.0);
+		$letter_spacing = (float) ($settings['letter_spacing_px'] ?? 0.0);
 
 		$css = "
 			@page { margin: 0; }
@@ -205,7 +221,7 @@ final class AtrishaWoo_Order_Label {
 			body { direction: rtl; font-family: Tahoma, Arial, sans-serif; }
 			.atrishawoo-label { width: {$width}mm; height: {$height}mm; padding: {$padding}mm; box-sizing: border-box; overflow: hidden; }
 			.atrishawoo-label * { box-sizing: border-box; }
-			.atrishawoo-label .atrishawoo-line { font-size: {$font_size}pt; line-height: 1.25; margin: 0 0 1.5mm 0; white-space: pre-wrap; word-break: break-word; }
+			.atrishawoo-label .atrishawoo-line { font-size: {$font_size}pt; line-height: {$line_height}; font-weight: {$font_weight}; font-style: {$font_style}; word-spacing: {$word_spacing}px; letter-spacing: {$letter_spacing}px; margin: 0 0 1.5mm 0; white-space: pre-wrap; word-break: break-word; }
 			.atrishawoo-label .atrishawoo-header { font-weight: 700; margin-bottom: 2mm; }
 		";
 
@@ -355,6 +371,11 @@ final class AtrishaWoo_Order_Label {
 		$height = (int) $settings['height_mm'];
 		$padding = (int) $settings['padding_mm'];
 		$font_size = (int) $settings['font_size_pt'];
+		$line_height = (float) $settings['line_height'];
+		$font_weight = (string) ($settings['font_weight'] ?? 'normal');
+		$font_style = (string) ($settings['font_style'] ?? 'normal');
+		$word_spacing = (float) ($settings['word_spacing_px'] ?? 0.0);
+		$letter_spacing = (float) ($settings['letter_spacing_px'] ?? 0.0);
 		$style = 'width:' . $width . 'mm;height:' . $height . 'mm;padding:' . $padding . 'mm;font-size:' . $font_size . 'pt;';
 		$style .= 'box-sizing:border-box;overflow:hidden;direction:rtl;font-family:Tahoma,Arial,sans-serif;';
 		if ($for_preview) {
@@ -365,11 +386,12 @@ final class AtrishaWoo_Order_Label {
 
 		foreach ($lines as $line) {
 			$line = (string) $line;
+			$line_style = 'line-height:' . $line_height . ';font-weight:' . $font_weight . ';font-style:' . $font_style . ';word-spacing:' . $word_spacing . 'px;letter-spacing:' . $letter_spacing . 'px;margin:0 0 1.5mm 0;white-space:pre-wrap;word-break:break-word;';
 			if ($line === '') {
-				$html .= '<div class="atrishawoo-line" style="margin:0 0 1.5mm 0;white-space:pre-wrap;word-break:break-word;">&nbsp;</div>';
+				$html .= '<div class="atrishawoo-line" style="' . esc_attr($line_style) . '">&nbsp;</div>';
 				continue;
 			}
-			$html .= '<div class="atrishawoo-line" style="margin:0 0 1.5mm 0;white-space:pre-wrap;word-break:break-word;">' . esc_html($line) . '</div>';
+			$html .= '<div class="atrishawoo-line" style="' . esc_attr($line_style) . '">' . esc_html($line) . '</div>';
 		}
 
 		$html .= '</div>';
@@ -383,6 +405,11 @@ final class AtrishaWoo_Order_Label {
 			'height_mm' => 50,
 			'padding_mm' => 3,
 			'font_size_pt' => 11,
+			'line_height' => 1.25,
+			'font_weight' => 'normal',
+			'font_style' => 'normal',
+			'word_spacing_px' => 0,
+			'letter_spacing_px' => 0,
 			'template_text' => "گیرنده\n{name} محترم\n{phonenumber}\nآدرس: {address}\n{city_state}\nکدپستی: {postcode}",
 			'header_text' => '',
 			'manual_text' => '',
@@ -450,17 +477,51 @@ final class AtrishaWoo_Order_Label {
 		$note = trim((string) $order->get_customer_note());
 		$total = (string) $order->get_formatted_order_total();
 
+		$needs_items = (strpos($template, '{items}') !== false)
+			|| (strpos($template, '{productnames}') !== false)
+			|| (strpos($template, '{firstproduct}') !== false)
+			|| (strpos($template, '{itemcount}') !== false)
+			|| (strpos($template, '{totalqty}') !== false);
+
 		$items_text = '';
-		if (strpos($template, '{items}') !== false) {
+		$product_names_text = '';
+		$first_product = '';
+		$item_count = '';
+		$total_qty = '';
+
+		if ($needs_items) {
 			$items = [];
+			$product_names = [];
+			$total_qty_int = 0;
+
 			foreach ($order->get_items() as $item) {
-				$name = (string) $item->get_name();
+				$name = trim((string) $item->get_name());
 				$qty = (int) $item->get_quantity();
-				$items[] = $name . ' × ' . $qty;
+				$total_qty_int += max(0, $qty);
+
+				if ($name !== '') {
+					$product_names[] = $name;
+				}
+				if ($name !== '' && $first_product === '') {
+					$first_product = $name;
+				}
+
+				if ($name !== '') {
+					$items[] = $name . ' × ' . $qty;
+				}
 			}
+
 			if ($items) {
 				$items_text = implode(' | ', $items);
 			}
+
+			$product_names = array_values(array_unique($product_names));
+			if ($product_names) {
+				$product_names_text = implode(' | ', $product_names);
+			}
+
+			$item_count = (string) count($order->get_items());
+			$total_qty = (string) $total_qty_int;
 		}
 
 		return [
@@ -475,6 +536,10 @@ final class AtrishaWoo_Order_Label {
 			'{orderid}' => $order_id,
 			'{orderdate}' => $order_date,
 			'{items}' => $items_text,
+			'{productnames}' => $product_names_text,
+			'{firstproduct}' => $first_product,
+			'{itemcount}' => $item_count,
+			'{totalqty}' => $total_qty,
 			'{customernote}' => $note,
 			'{note}' => $note,
 			'{total}' => wp_strip_all_tags($total),
@@ -482,6 +547,16 @@ final class AtrishaWoo_Order_Label {
 	}
 
 	private static function clamp_int(int $value, int $min, int $max): int {
+		if ($value < $min) {
+			return $min;
+		}
+		if ($value > $max) {
+			return $max;
+		}
+		return $value;
+	}
+
+	private static function clamp_float(float $value, float $min, float $max): float {
 		if ($value < $min) {
 			return $min;
 		}

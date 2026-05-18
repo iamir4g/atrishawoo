@@ -29,6 +29,7 @@ final class AtrishaWoo_Admin {
 		add_action('wp_ajax_atrishawoo_label_preview', [$this, 'ajax_label_preview']);
 		add_action('wp_ajax_atrishawoo_label_save_settings', [$this, 'ajax_label_save_settings']);
 		add_action('wp_ajax_atrishawoo_label_prepare_print', [$this, 'ajax_label_prepare_print']);
+		add_action('wp_ajax_atrishawoo_label_orders', [$this, 'ajax_label_orders']);
 		add_action('wp_ajax_atrishawoo_label_save_preset', [$this, 'ajax_label_save_preset']);
 		add_action('wp_ajax_atrishawoo_label_delete_preset', [$this, 'ajax_label_delete_preset']);
 		add_action('wp_ajax_atrishawoo_label_set_default_preset', [$this, 'ajax_label_set_default_preset']);
@@ -172,6 +173,11 @@ final class AtrishaWoo_Admin {
 		echo '<tr><th scope="row"><label for="atrishawoo-label-height">ارتفاع (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-height" min="10" max="200" value="' . esc_attr((string) $settings['height_mm']) . '" /></td></tr>';
 		echo '<tr><th scope="row"><label for="atrishawoo-label-padding">حاشیه داخلی (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-padding" min="0" max="20" value="' . esc_attr((string) $settings['padding_mm']) . '" /></td></tr>';
 		echo '<tr><th scope="row"><label for="atrishawoo-label-font">سایز فونت (pt)</label></th><td><input type="number" id="atrishawoo-label-font" min="6" max="24" value="' . esc_attr((string) $settings['font_size_pt']) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-line-height">ارتفاع خط (Line height)</label></th><td><input type="number" id="atrishawoo-label-line-height" step="0.05" min="0.8" max="3" value="' . esc_attr((string) ($settings['line_height'] ?? 1.25)) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-font-weight">ضخامت</label></th><td><select id="atrishawoo-label-font-weight"><option value="normal"' . selected((string) ($settings['font_weight'] ?? 'normal'), 'normal', false) . '>Normal</option><option value="bold"' . selected((string) ($settings['font_weight'] ?? 'normal'), 'bold', false) . '>Bold</option></select></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-font-style">استایل</label></th><td><select id="atrishawoo-label-font-style"><option value="normal"' . selected((string) ($settings['font_style'] ?? 'normal'), 'normal', false) . '>Normal</option><option value="italic"' . selected((string) ($settings['font_style'] ?? 'normal'), 'italic', false) . '>Italic</option></select></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-word-spacing">فاصله بین کلمات (px)</label></th><td><input type="number" id="atrishawoo-label-word-spacing" step="0.5" min="0" max="20" value="' . esc_attr((string) ($settings['word_spacing_px'] ?? 0)) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-letter-spacing">فاصله بین حروف (px)</label></th><td><input type="number" id="atrishawoo-label-letter-spacing" step="0.5" min="-2" max="10" value="' . esc_attr((string) ($settings['letter_spacing_px'] ?? 0)) . '" /></td></tr>';
 		echo '<tr><th scope="row"><label for="atrishawoo-label-template">متن لیبل</label></th><td><textarea id="atrishawoo-label-template" rows="8" class="large-text code" placeholder="مثلاً:&#10;گیرنده&#10;{name} محترم&#10;{phonenumber}&#10;آدرس: {address}">' . esc_textarea((string) ($settings['template_text'] ?? '')) . '</textarea></td></tr>';
 		echo '</tbody></table>';
 
@@ -197,47 +203,15 @@ final class AtrishaWoo_Admin {
 
 		echo '</div>';
 
-		$orders = [];
-		if (function_exists('wc_get_orders')) {
-			$orders = wc_get_orders([
-				'limit' => 20,
-				'orderby' => 'date',
-				'order' => 'DESC',
-				'return' => 'objects',
-			]);
-		}
-
 		echo '<div class="atrishawoo-card" style="margin-top:16px;">';
-		echo '<h3>آخرین سفارش‌ها</h3>';
-		echo '<table class="widefat striped" style="width:100%;">';
-		echo '<thead><tr><th>سفارش</th><th>تاریخ</th><th>مشتری</th><th>وضعیت</th><th>مبلغ</th><th>عملیات</th></tr></thead><tbody>';
-		if ($orders) {
-			foreach ($orders as $order) {
-				if (!(is_object($order) && is_a($order, 'WC_Order'))) {
-					continue;
-				}
-				$oid = (int) $order->get_id();
-				$date = $order->get_date_created();
-				$date_text = $date ? $date->date_i18n('Y-m-d H:i') : '';
-				$name = trim((string) $order->get_formatted_shipping_full_name());
-				if ($name === '') {
-					$name = trim((string) $order->get_formatted_billing_full_name());
-				}
-				$status = wc_get_order_status_name($order->get_status());
-				$total = $order->get_formatted_order_total();
-				echo '<tr>';
-				echo '<td>#' . esc_html((string) $oid) . '</td>';
-				echo '<td>' . esc_html($date_text) . '</td>';
-				echo '<td>' . esc_html($name !== '' ? $name : '-') . '</td>';
-				echo '<td>' . esc_html($status) . '</td>';
-				echo '<td>' . wp_kses_post($total) . '</td>';
-				echo '<td><button class="button atrishawoo-load-order" data-order-id="' . esc_attr((string) $oid) . '">بارگذاری</button> <button class="button button-primary atrishawoo-print-order" data-order-id="' . esc_attr((string) $oid) . '">چاپ</button></td>';
-				echo '</tr>';
-			}
-		} else {
-			echo '<tr><td colspan="6">سفارشی یافت نشد.</td></tr>';
-		}
-		echo '</tbody></table>';
+		echo '<h3>سفارش‌ها</h3>';
+		echo '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 12px 0;">';
+		echo '<input type="text" id="atrishawoo-orders-query" class="regular-text" placeholder="جستجو: تلفن / ایمیل / نام / شماره سفارش" />';
+		echo '<button class="button" id="atrishawoo-orders-search-btn">جستجو</button>';
+		echo '<button class="button" id="atrishawoo-orders-latest-btn">آخرین سفارش‌ها</button>';
+		echo '<span id="atrishawoo-orders-msg" style="color:#646970;"></span>';
+		echo '</div>';
+		echo '<div id="atrishawoo-orders-table"></div>';
 		echo '</div>';
 
 		echo '</div>';
@@ -353,6 +327,103 @@ final class AtrishaWoo_Admin {
 			$message = defined('WP_DEBUG') && WP_DEBUG ? $e->getMessage() : 'print_prepare_failed';
 			wp_send_json_error(['message' => $message], 500);
 		}
+	}
+
+	public function ajax_label_orders(): void {
+		if (!current_user_can('manage_woocommerce')) {
+			wp_send_json_error(['message' => 'forbidden'], 403);
+		}
+
+		check_ajax_referer('atrishawoo_sku', 'nonce');
+
+		$q = isset($_POST['q']) ? sanitize_text_field(wp_unslash($_POST['q'])) : '';
+		$q = trim($q);
+		$q = ltrim($q, "# \t\n\r\0\x0B");
+
+		$args = [
+			'limit' => 20,
+			'orderby' => 'date',
+			'order' => 'DESC',
+			'return' => 'objects',
+		];
+
+		if ($q !== '') {
+			$args['limit'] = 50;
+			if (ctype_digit($q)) {
+				$args['include'] = [(int) $q];
+				$args['limit'] = 1;
+			} else {
+				$args['meta_query'] = [
+					'relation' => 'OR',
+					[
+						'key' => '_billing_phone',
+						'value' => $q,
+						'compare' => 'LIKE',
+					],
+					[
+						'key' => '_billing_email',
+						'value' => $q,
+						'compare' => 'LIKE',
+					],
+					[
+						'key' => '_billing_first_name',
+						'value' => $q,
+						'compare' => 'LIKE',
+					],
+					[
+						'key' => '_billing_last_name',
+						'value' => $q,
+						'compare' => 'LIKE',
+					],
+					[
+						'key' => '_shipping_first_name',
+						'value' => $q,
+						'compare' => 'LIKE',
+					],
+					[
+						'key' => '_shipping_last_name',
+						'value' => $q,
+						'compare' => 'LIKE',
+					],
+				];
+			}
+		}
+
+		try {
+			$orders = wc_get_orders($args);
+		} catch (Throwable $e) {
+			$message = defined('WP_DEBUG') && WP_DEBUG ? $e->getMessage() : 'orders_failed';
+			wp_send_json_error(['message' => $message], 500);
+		}
+
+		$out = [];
+		if (is_array($orders)) {
+			foreach ($orders as $order) {
+				if (!(is_object($order) && is_a($order, 'WC_Order'))) {
+					continue;
+				}
+
+				$oid = (int) $order->get_id();
+				$date = $order->get_date_created();
+				$date_text = $date ? $date->date_i18n('Y-m-d H:i') : '';
+				$name = trim((string) $order->get_formatted_shipping_full_name());
+				if ($name === '') {
+					$name = trim((string) $order->get_formatted_billing_full_name());
+				}
+				$status = wc_get_order_status_name($order->get_status());
+				$total = $order->get_formatted_order_total();
+
+				$out[] = [
+					'id' => $oid,
+					'date' => $date_text,
+					'name' => $name,
+					'status' => $status,
+					'total' => wp_strip_all_tags((string) $total),
+				];
+			}
+		}
+
+		wp_send_json_success(['orders' => $out]);
 	}
 
 	public function admin_post_label_print(): void {
@@ -487,6 +558,11 @@ final class AtrishaWoo_Admin {
 			height_mm: parseInt($('#atrishawoo-label-height').val(), 10),
 			padding_mm: parseInt($('#atrishawoo-label-padding').val(), 10),
 			font_size_pt: parseInt($('#atrishawoo-label-font').val(), 10),
+			line_height: parseFloat($('#atrishawoo-label-line-height').val()),
+			font_weight: $('#atrishawoo-label-font-weight').val(),
+			font_style: $('#atrishawoo-label-font-style').val(),
+			word_spacing_px: parseFloat($('#atrishawoo-label-word-spacing').val()),
+			letter_spacing_px: parseFloat($('#atrishawoo-label-letter-spacing').val()),
 			template_text: $('#atrishawoo-label-template').val()
 		};
 	}
@@ -496,6 +572,58 @@ final class AtrishaWoo_Admin {
 		if (!el.length) return;
 		var color = type === 'error' ? '#b32d2e' : '#1d2327';
 		el.css({color: color}).text(text || '');
+	}
+
+	function setOrdersMsg(text, type){
+		var el = $('#atrishawoo-orders-msg');
+		if (!el.length) return;
+		var color = type === 'error' ? '#b32d2e' : '#646970';
+		el.css({color: color}).text(text || '');
+	}
+
+	function escHtml(s){
+		return $('<div/>').text(s || '').html();
+	}
+
+	function renderOrdersTable(orders){
+		var container = $('#atrishawoo-orders-table');
+		if (!container.length) return;
+		if (!orders || !orders.length) {
+			container.html('<div style="color:#646970;">سفارشی یافت نشد.</div>');
+			return;
+		}
+
+		var html = '';
+		html += '<table class="widefat striped" style="width:100%;">';
+		html += '<thead><tr><th>سفارش</th><th>تاریخ</th><th>مشتری</th><th>وضعیت</th><th>مبلغ</th><th>عملیات</th></tr></thead><tbody>';
+		for (var i=0;i<orders.length;i++){
+			var o = orders[i] || {};
+			var id = parseInt(o.id, 10) || 0;
+			html += '<tr>';
+			html += '<td>#' + escHtml(String(id)) + '</td>';
+			html += '<td>' + escHtml(o.date || '') + '</td>';
+			html += '<td>' + escHtml(o.name || '-') + '</td>';
+			html += '<td>' + escHtml(o.status || '') + '</td>';
+			html += '<td>' + escHtml(o.total || '') + '</td>';
+			html += '<td><button class="button atrishawoo-load-order" data-order-id="' + escHtml(String(id)) + '">بارگذاری</button> <button class="button button-primary atrishawoo-print-order" data-order-id="' + escHtml(String(id)) + '">چاپ</button></td>';
+			html += '</tr>';
+		}
+		html += '</tbody></table>';
+		container.html(html);
+	}
+
+	function loadOrders(query){
+		setOrdersMsg('در حال دریافت سفارش‌ها...');
+		return post('atrishawoo_label_orders', {q: query || ''}).then(function(resp){
+			if (!resp || !resp.success || !resp.data) {
+				var msg = (resp && resp.data && resp.data.message) ? resp.data.message : 'خطا در دریافت سفارش‌ها';
+				setOrdersMsg(msg, 'error');
+				renderOrdersTable([]);
+				return;
+			}
+			setOrdersMsg('');
+			renderOrdersTable(resp.data.orders || []);
+		});
 	}
 
 	function jobText(job){
@@ -607,6 +735,11 @@ final class AtrishaWoo_Admin {
 		$('#atrishawoo-label-height').val(settings.height_mm);
 		$('#atrishawoo-label-padding').val(settings.padding_mm);
 		$('#atrishawoo-label-font').val(settings.font_size_pt);
+		$('#atrishawoo-label-line-height').val(settings.line_height);
+		$('#atrishawoo-label-font-weight').val(settings.font_weight || 'normal');
+		$('#atrishawoo-label-font-style').val(settings.font_style || 'normal');
+		$('#atrishawoo-label-word-spacing').val(settings.word_spacing_px);
+		$('#atrishawoo-label-letter-spacing').val(settings.letter_spacing_px);
 		$('#atrishawoo-label-template').val(settings.template_text || '');
 	}
 
@@ -702,9 +835,17 @@ final class AtrishaWoo_Admin {
 		});
 	}
 
-	function labelPrint(){
+	function labelPrint(printWindow){
 		var settings = getLabelSettingsFromForm();
 		var orderId = parseInt($('#atrishawoo-label-order-id').val(), 10) || 0;
+
+		if (!printWindow) {
+			printWindow = window.open('about:blank', '_blank', 'noopener');
+		}
+		if (!printWindow) {
+			setLabelMsg('Popup blocker فعال است. اجازه باز شدن صفحه چاپ را بدهید.', 'error');
+			return;
+		}
 
 		setLabelMsg('در حال آماده‌سازی چاپ...');
 		return post('atrishawoo_label_prepare_print', {order_id: orderId, settings: settings}).then(function(resp){
@@ -713,7 +854,11 @@ final class AtrishaWoo_Admin {
 				return;
 			}
 			setLabelMsg('در حال باز کردن صفحه چاپ...');
-			window.open(resp.data.printUrl, '_blank', 'noopener');
+			try {
+				printWindow.location = resp.data.printUrl;
+			} catch (e) {
+				window.open(resp.data.printUrl, '_blank', 'noopener');
+			}
 		});
 	}
 
@@ -793,10 +938,15 @@ final class AtrishaWoo_Admin {
 				e.preventDefault();
 				var oid = parseInt($(this).data('order-id'), 10) || 0;
 				if (!oid) return;
+				var pw = window.open('about:blank', '_blank', 'noopener');
+				if (!pw) {
+					setLabelMsg('Popup blocker فعال است. اجازه باز شدن صفحه چاپ را بدهید.', 'error');
+					return;
+				}
 				$('#atrishawoo-label-order-id').val(oid);
 				$('#atrishawoo-label-order-selected').text('سفارش انتخاب‌شده: #' + oid);
 				labelPreview().then(function(){
-					labelPrint();
+					labelPrint(pw);
 				});
 			});
 
@@ -814,6 +964,25 @@ final class AtrishaWoo_Admin {
 				el.setSelectionRange(pos, pos);
 				ta.trigger('input');
 			});
+
+			if ($('#atrishawoo-orders-search-btn').length) {
+				$('#atrishawoo-orders-search-btn').on('click', function(e){
+					e.preventDefault();
+					loadOrders(($('#atrishawoo-orders-query').val() || '').trim());
+				});
+				$('#atrishawoo-orders-latest-btn').on('click', function(e){
+					e.preventDefault();
+					$('#atrishawoo-orders-query').val('');
+					loadOrders('');
+				});
+				$('#atrishawoo-orders-query').on('keydown', function(e){
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						loadOrders(($(this).val() || '').trim());
+					}
+				});
+				loadOrders('');
+			}
 
 			$('#atrishawoo-label-preview-btn').on('click', function(e){
 				e.preventDefault();
@@ -840,7 +1009,7 @@ final class AtrishaWoo_Admin {
 				}, 250);
 			}
 
-			$('#atrishawoo-label-width, #atrishawoo-label-height, #atrishawoo-label-padding, #atrishawoo-label-font, #atrishawoo-label-template').on('input', schedulePreview);
+			$('#atrishawoo-label-width, #atrishawoo-label-height, #atrishawoo-label-padding, #atrishawoo-label-font, #atrishawoo-label-line-height, #atrishawoo-label-font-weight, #atrishawoo-label-font-style, #atrishawoo-label-word-spacing, #atrishawoo-label-letter-spacing, #atrishawoo-label-template').on('input change', schedulePreview);
 
 			labelPreview();
 		}
