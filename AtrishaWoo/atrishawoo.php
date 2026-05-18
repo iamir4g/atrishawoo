@@ -2,7 +2,7 @@
 /**
  * Plugin Name: AtrishaWoo
  * Description: ابزارهای مدیریتی برای ووکامرس (شامل تولید یک‌باره SKU با شماره‌گذاری یکتا و افزایشی).
- * Version: 0.3.1
+ * Version: 0.3.3
  * Author: Atrisha
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
-define('ATRISHAWOO_VERSION', '0.3.1');
+define('ATRISHAWOO_VERSION', '0.3.3');
 define('ATRISHAWOO_PATH', plugin_dir_path(__FILE__));
 define('ATRISHAWOO_URL', plugin_dir_url(__FILE__));
 

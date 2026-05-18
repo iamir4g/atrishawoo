@@ -139,6 +139,9 @@ final class AtrishaWoo_Order_Label {
 		$settings['word_spacing_px'] = self::clamp_float((float) ($settings['word_spacing_px'] ?? 0.0), 0.0, 20.0);
 		$settings['letter_spacing_px'] = self::clamp_float((float) ($settings['letter_spacing_px'] ?? 0.0), -2.0, 10.0);
 
+		$settings['items_override_text'] = isset($settings['items_override_text']) ? (string) $settings['items_override_text'] : '';
+		$settings['items_override_text'] = trim(str_replace(["\r\n", "\r"], "\n", $settings['items_override_text']));
+
 		$settings['template_text'] = isset($settings['template_text']) ? (string) $settings['template_text'] : '';
 		$settings['template_text'] = trim(str_replace(["\r\n", "\r"], "\n", $settings['template_text']));
 
@@ -180,8 +183,11 @@ final class AtrishaWoo_Order_Label {
 			'{orderid}' => 'شماره سفارش',
 			'{orderdate}' => 'تاریخ سفارش',
 			'{items}' => 'اقلام سفارش',
+			'{items_sku}' => 'اقلام + SKU',
 			'{productnames}' => 'نام محصولات (فهرست)',
 			'{firstproduct}' => 'نام اولین محصول',
+			'{skus}' => 'SKUها (فهرست)',
+			'{firstsku}' => 'SKU اولین محصول',
 			'{itemcount}' => 'تعداد ردیف کالا',
 			'{totalqty}' => 'جمع تعداد اقلام',
 			'{customernote}' => 'یادداشت مشتری',
@@ -243,7 +249,7 @@ final class AtrishaWoo_Order_Label {
 		$manual_text = trim((string) ($settings['manual_text'] ?? ''));
 
 		if ($template_text !== '') {
-			$text = self::apply_template($template_text, $order);
+			$text = self::apply_template($template_text, $order, $settings);
 			$raw_lines = preg_split("/\\r\\n|\\r|\\n/u", $text) ?: [];
 			$lines = [];
 			foreach ($raw_lines as $line) {
@@ -419,16 +425,16 @@ final class AtrishaWoo_Order_Label {
 		return array_merge($defaults, $settings);
 	}
 
-	private static function apply_template(string $template, $order): string {
+	private static function apply_template(string $template, $order, array $settings): string {
 		$order = (is_object($order) && is_a($order, 'WC_Order')) ? $order : null;
-		$map = self::placeholder_map($order, $template);
+		$map = self::placeholder_map($order, $template, $settings);
 		$text = strtr($template, $map);
 		$text = preg_replace("/[ \\t]+/u", ' ', $text);
 		$text = preg_replace("/\\n{3,}/u", "\n\n", $text);
 		return is_string($text) ? trim($text) : '';
 	}
 
-	private static function placeholder_map($order, string $template): array {
+	private static function placeholder_map($order, string $template, array $settings): array {
 		if (!$order) {
 			$empty = [];
 			foreach (array_keys(self::available_placeholders()) as $token) {
@@ -478,20 +484,28 @@ final class AtrishaWoo_Order_Label {
 		$total = (string) $order->get_formatted_order_total();
 
 		$needs_items = (strpos($template, '{items}') !== false)
+			|| (strpos($template, '{items_sku}') !== false)
 			|| (strpos($template, '{productnames}') !== false)
 			|| (strpos($template, '{firstproduct}') !== false)
+			|| (strpos($template, '{skus}') !== false)
+			|| (strpos($template, '{firstsku}') !== false)
 			|| (strpos($template, '{itemcount}') !== false)
 			|| (strpos($template, '{totalqty}') !== false);
 
 		$items_text = '';
+		$items_sku_text = '';
 		$product_names_text = '';
 		$first_product = '';
+		$skus_text = '';
+		$first_sku = '';
 		$item_count = '';
 		$total_qty = '';
 
 		if ($needs_items) {
 			$items = [];
+			$items_sku = [];
 			$product_names = [];
+			$skus = [];
 			$total_qty_int = 0;
 
 			foreach ($order->get_items() as $item) {
@@ -499,20 +513,47 @@ final class AtrishaWoo_Order_Label {
 				$qty = (int) $item->get_quantity();
 				$total_qty_int += max(0, $qty);
 
+				$sku = '';
+				$product = is_object($item) && method_exists($item, 'get_product') ? $item->get_product() : null;
+				if (is_object($product) && method_exists($product, 'get_sku')) {
+					$sku = trim((string) $product->get_sku());
+				}
+				if ($sku === '' && is_object($item) && method_exists($item, 'get_meta')) {
+					$meta_sku = $item->get_meta('_sku', true);
+					if (!is_string($meta_sku) || $meta_sku === '') {
+						$meta_sku = $item->get_meta('sku', true);
+					}
+					$sku = trim((string) $meta_sku);
+				}
+
 				if ($name !== '') {
 					$product_names[] = $name;
 				}
 				if ($name !== '' && $first_product === '') {
 					$first_product = $name;
 				}
+				if ($sku !== '') {
+					$skus[] = $sku;
+				}
+				if ($sku !== '' && $first_sku === '') {
+					$first_sku = $sku;
+				}
 
 				if ($name !== '') {
 					$items[] = $name . ' × ' . $qty;
+				}
+				if ($name !== '' && $sku !== '') {
+					$items_sku[] = $name . ' × ' . $qty . ' | SKU: ' . $sku;
+				} elseif ($name !== '') {
+					$items_sku[] = $name . ' × ' . $qty;
 				}
 			}
 
 			if ($items) {
 				$items_text = implode(' | ', $items);
+			}
+			if ($items_sku) {
+				$items_sku_text = implode(' | ', $items_sku);
 			}
 
 			$product_names = array_values(array_unique($product_names));
@@ -520,8 +561,18 @@ final class AtrishaWoo_Order_Label {
 				$product_names_text = implode(' | ', $product_names);
 			}
 
+			$skus = array_values(array_unique($skus));
+			if ($skus) {
+				$skus_text = implode(' | ', $skus);
+			}
+
 			$item_count = (string) count($order->get_items());
 			$total_qty = (string) $total_qty_int;
+		}
+
+		$items_override = isset($settings['items_override_text']) ? trim((string) $settings['items_override_text']) : '';
+		if ($items_override !== '') {
+			$items_text = $items_override;
 		}
 
 		return [
@@ -536,8 +587,11 @@ final class AtrishaWoo_Order_Label {
 			'{orderid}' => $order_id,
 			'{orderdate}' => $order_date,
 			'{items}' => $items_text,
+			'{items_sku}' => $items_sku_text,
 			'{productnames}' => $product_names_text,
 			'{firstproduct}' => $first_product,
+			'{skus}' => $skus_text,
+			'{firstsku}' => $first_sku,
 			'{itemcount}' => $item_count,
 			'{totalqty}' => $total_qty,
 			'{customernote}' => $note,

@@ -35,6 +35,7 @@ final class AtrishaWoo_Admin {
 		add_action('wp_ajax_atrishawoo_label_set_default_preset', [$this, 'ajax_label_set_default_preset']);
 
 		add_action('admin_post_atrishawoo_label_print', [$this, 'admin_post_label_print']);
+		add_action('admin_post_atrishawoo_label_print_post', [$this, 'admin_post_label_print_post']);
 
 		add_filter('woocommerce_admin_order_actions', [$this, 'add_order_row_action'], 10, 2);
 	}
@@ -66,6 +67,8 @@ final class AtrishaWoo_Admin {
 		$payload = [
 			'ajaxUrl' => admin_url('admin-ajax.php'),
 			'nonce' => wp_create_nonce('atrishawoo_sku'),
+			'printPostUrl' => admin_url('admin-post.php'),
+			'printPostNonce' => wp_create_nonce('atrishawoo_label_print_post'),
 			'job' => $job,
 			'labelSettings' => $label_settings,
 			'labelPresets' => $label_presets,
@@ -179,6 +182,7 @@ final class AtrishaWoo_Admin {
 		echo '<tr><th scope="row"><label for="atrishawoo-label-word-spacing">فاصله بین کلمات (px)</label></th><td><input type="number" id="atrishawoo-label-word-spacing" step="0.5" min="0" max="20" value="' . esc_attr((string) ($settings['word_spacing_px'] ?? 0)) . '" /></td></tr>';
 		echo '<tr><th scope="row"><label for="atrishawoo-label-letter-spacing">فاصله بین حروف (px)</label></th><td><input type="number" id="atrishawoo-label-letter-spacing" step="0.5" min="-2" max="10" value="' . esc_attr((string) ($settings['letter_spacing_px'] ?? 0)) . '" /></td></tr>';
 		echo '<tr><th scope="row"><label for="atrishawoo-label-template">متن لیبل</label></th><td><textarea id="atrishawoo-label-template" rows="8" class="large-text code" placeholder="مثلاً:&#10;گیرنده&#10;{name} محترم&#10;{phonenumber}&#10;آدرس: {address}">' . esc_textarea((string) ($settings['template_text'] ?? '')) . '</textarea></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-items-override">اقلام سفارش (قابل ویرایش)</label></th><td><textarea id="atrishawoo-label-items-override" rows="4" class="large-text code" placeholder="اختیاری: اگر اینجا چیزی بنویسید، {items} از همین متن استفاده می‌کند.">' . esc_textarea((string) ($settings['items_override_text'] ?? '')) . '</textarea></td></tr>';
 		echo '</tbody></table>';
 
 		echo '<h3>Placeholderها</h3>';
@@ -466,6 +470,33 @@ final class AtrishaWoo_Admin {
 		exit;
 	}
 
+	public function admin_post_label_print_post(): void {
+		if (!current_user_can('manage_woocommerce')) {
+			wp_die('Access denied');
+		}
+
+		$nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+		if (!wp_verify_nonce($nonce, 'atrishawoo_label_print_post')) {
+			wp_die('Invalid nonce');
+		}
+
+		$order_id = isset($_POST['order_id']) ? (int) $_POST['order_id'] : 0;
+		$settings = isset($_POST['settings']) && is_array($_POST['settings']) ? (array) $_POST['settings'] : [];
+		$settings = AtrishaWoo_Order_Label::sanitize_settings($this->unslash_deep($settings));
+
+		$order = null;
+		if ($order_id > 0) {
+			$maybe_order = wc_get_order($order_id);
+			$order = ($maybe_order instanceof WC_Order) ? $maybe_order : null;
+		}
+
+		$html = AtrishaWoo_Order_Label::render_print_document_html($order, $settings);
+
+		header('Content-Type: text/html; charset=' . get_option('blog_charset'));
+		echo $html;
+		exit;
+	}
+
 	private function unslash_deep(array $value): array {
 		return wp_unslash($value);
 	}
@@ -563,7 +594,8 @@ final class AtrishaWoo_Admin {
 			font_style: $('#atrishawoo-label-font-style').val(),
 			word_spacing_px: parseFloat($('#atrishawoo-label-word-spacing').val()),
 			letter_spacing_px: parseFloat($('#atrishawoo-label-letter-spacing').val()),
-			template_text: $('#atrishawoo-label-template').val()
+			template_text: $('#atrishawoo-label-template').val(),
+			items_override_text: $('#atrishawoo-label-items-override').val()
 		};
 	}
 
@@ -741,6 +773,7 @@ final class AtrishaWoo_Admin {
 		$('#atrishawoo-label-word-spacing').val(settings.word_spacing_px);
 		$('#atrishawoo-label-letter-spacing').val(settings.letter_spacing_px);
 		$('#atrishawoo-label-template').val(settings.template_text || '');
+		$('#atrishawoo-label-items-override').val(settings.items_override_text || '');
 	}
 
 	function rebuildPresetSelect(){
@@ -835,31 +868,40 @@ final class AtrishaWoo_Admin {
 		});
 	}
 
-	function labelPrint(printWindow){
+	function labelPrint(orderIdOverride){
 		var settings = getLabelSettingsFromForm();
-		var orderId = parseInt($('#atrishawoo-label-order-id').val(), 10) || 0;
+		var orderId = (typeof orderIdOverride === 'number') ? orderIdOverride : (parseInt($('#atrishawoo-label-order-id').val(), 10) || 0);
 
-		if (!printWindow) {
-			printWindow = window.open('about:blank', '_blank', 'noopener');
-		}
-		if (!printWindow) {
-			setLabelMsg('Popup blocker فعال است. اجازه باز شدن صفحه چاپ را بدهید.', 'error');
+		if (!window.AtrishaWooSku || !window.AtrishaWooSku.printPostUrl || !window.AtrishaWooSku.printPostNonce) {
+			setLabelMsg('تنظیمات چاپ آماده نیست', 'error');
 			return;
 		}
 
-		setLabelMsg('در حال آماده‌سازی چاپ...');
-		return post('atrishawoo_label_prepare_print', {order_id: orderId, settings: settings}).then(function(resp){
-			if (!resp || !resp.success || !resp.data || !resp.data.printUrl) {
-				setLabelMsg('خطا در آماده‌سازی چاپ', 'error');
-				return;
-			}
-			setLabelMsg('در حال باز کردن صفحه چاپ...');
-			try {
-				printWindow.location = resp.data.printUrl;
-			} catch (e) {
-				window.open(resp.data.printUrl, '_blank', 'noopener');
-			}
+		var form = $('<form/>', {
+			method: 'POST',
+			action: window.AtrishaWooSku.printPostUrl,
+			target: '_blank'
 		});
+
+		form.append($('<input/>', {type: 'hidden', name: 'action', value: 'atrishawoo_label_print_post'}));
+		form.append($('<input/>', {type: 'hidden', name: 'nonce', value: window.AtrishaWooSku.printPostNonce}));
+		form.append($('<input/>', {type: 'hidden', name: 'order_id', value: String(orderId)}));
+
+		Object.keys(settings || {}).forEach(function(key){
+			var val = settings[key];
+			if (val === undefined || val === null) {
+				val = '';
+			}
+			if (typeof val === 'number' && isNaN(val)) {
+				val = '';
+			}
+			form.append($('<input/>', {type: 'hidden', name: 'settings[' + key + ']', value: String(val)}));
+		});
+
+		setLabelMsg('در حال باز کردن صفحه چاپ...');
+		$('body').append(form);
+		form.trigger('submit');
+		form.remove();
 	}
 
 	$(function(){
@@ -938,16 +980,9 @@ final class AtrishaWoo_Admin {
 				e.preventDefault();
 				var oid = parseInt($(this).data('order-id'), 10) || 0;
 				if (!oid) return;
-				var pw = window.open('about:blank', '_blank', 'noopener');
-				if (!pw) {
-					setLabelMsg('Popup blocker فعال است. اجازه باز شدن صفحه چاپ را بدهید.', 'error');
-					return;
-				}
 				$('#atrishawoo-label-order-id').val(oid);
 				$('#atrishawoo-label-order-selected').text('سفارش انتخاب‌شده: #' + oid);
-				labelPreview().then(function(){
-					labelPrint(pw);
-				});
+				labelPrint(oid);
 			});
 
 			$(document).on('click', '.atrishawoo-insert-token', function(e){
