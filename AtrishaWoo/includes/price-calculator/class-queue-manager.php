@@ -86,10 +86,10 @@ class Queue_Manager {
 	 * @param int $limit Batch limit.
 	 * @return array<int,object>
 	 */
-	public function claim_pending_jobs( $limit = 20 ) {
+	public function claim_pending_jobs( $limit = null ) {
 		global $wpdb;
 
-		$limit  = min( 20, max( 1, absint( $limit ) ) );
+		$limit  = $this->normalize_batch_limit( $limit );
 		$now    = current_time( 'mysql', true );
 		$token  = wp_generate_uuid4();
 		$table  = Installer::table_name();
@@ -112,10 +112,10 @@ class Queue_Manager {
 	}
 
 	/** Backward-compatible pending fetch. Prefer claim_pending_jobs(). */
-	public function fetch_pending_jobs( $limit = 20 ) {
+	public function fetch_pending_jobs( $limit = null ) {
 		global $wpdb;
 
-		$limit = min( 20, max( 1, absint( $limit ) ) );
+		$limit = $this->normalize_batch_limit( $limit );
 		return $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . Installer::table_name() . ' WHERE status = %s ORDER BY id ASC LIMIT %d', 'pending', $limit ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
@@ -189,6 +189,15 @@ class Queue_Manager {
 
 	private function normalize_sku( $sku ) {
 		return wc_clean( sanitize_text_field( (string) $sku ) );
+	}
+
+	private function normalize_batch_limit( $limit ) {
+		if ( null === $limit ) {
+			$limit = defined( 'MGMP_BATCH_SIZE' ) ? (int) \MGMP_BATCH_SIZE : 50;
+		}
+
+		$limit = (int) apply_filters( 'mgmp_batch_size', absint( $limit ) );
+		return min( 100, max( 1, $limit ) );
 	}
 
 	private function calculate_duration( $job_id, $completed_at ) {

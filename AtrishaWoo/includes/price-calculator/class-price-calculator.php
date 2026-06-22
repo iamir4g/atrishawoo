@@ -173,7 +173,7 @@ class Price_Calculator {
 	}
 
 	/**
-	 * Calculate rounded integer price.
+	 * Calculate rounded integer price (rounded up to the nearest display step).
 	 */
 	public function calculate_price( $volume, $essence_percent, $gram_price, $fixative_price, $bottle_price, $packaging_price, $shipping_cost, $tax_percent ) {
 		$essence_cost = $volume * $essence_percent * $gram_price;
@@ -183,6 +183,20 @@ class Price_Calculator {
 		$base_cost    = $production + $bottle_price + $packaging_price;
 		$final_price  = ( $base_cost + $shipping_cost ) * ( 1 + ( $tax_percent / 100 ) );
 
-		return (int) round( $final_price );
+		return $this->round_display_price( $final_price );
+	}
+
+	/**
+	 * Round up to the nearest pricing step (default 1,000 Toman).
+	 *
+	 * @param float $price Raw calculated price.
+	 */
+	private function round_display_price( $price ) {
+		$step = (int) apply_filters( 'mgmp_price_round_step', defined( 'MGMP_PRICE_ROUND_STEP' ) ? (int) \MGMP_PRICE_ROUND_STEP : 1000 );
+		if ( $step <= 1 ) {
+			return (int) round( $price );
+		}
+
+		return (int) ( ceil( $price / $step ) * $step );
 	}
 }

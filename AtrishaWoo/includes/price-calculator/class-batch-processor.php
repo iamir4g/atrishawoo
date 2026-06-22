@@ -41,36 +41,42 @@ class Batch_Processor {
 	}
 
 	public function process_batch() {
-		$jobs = $this->queue_manager->claim_pending_jobs( 20 );
+		$batch_size  = $this->get_batch_size();
+		$jobs        = $this->queue_manager->claim_pending_jobs( $batch_size );
 		if ( empty( $jobs ) ) {
 			return;
 		}
 
+		$parent_ids = array();
+		$this->begin_fast_updates();
+
 		foreach ( $jobs as $job ) {
-			$this->process_job( $job );
+			$parent_ids = array_replace( $parent_ids, $this->process_job( $job, false ) );
 		}
+
+		$this->end_fast_updates( $parent_ids );
 
 		if ( $this->queue_manager->has_pending_jobs() ) {
 			self::schedule();
 		}
 	}
 
-	private function process_job( $job ) {
+	/**
+	 * @return array<int,int> Parent product IDs keyed by themselves.
+	 */
+	private function process_job( $job, $sync_parent = true ) {
+		$parent_ids = array();
+
 		try {
-			$parent_ids = array();
-			$prices     = $this->calculator->calculate_job_prices( $job );
+			$prices = $this->calculator->calculate_job_prices( $job );
 
 			foreach ( $prices as $variation_id => $price_data ) {
-				$product = $price_data['product'];
 				$price   = $price_data['price'];
 				$sku     = $price_data['sku'];
-
-				// Update the actual WooCommerce variation matched under the input SKU parent.
-				$product->set_regular_price( wc_format_decimal( $price ) );
-				$product->set_price( wc_format_decimal( $price ) );
-				$product->save();
-
 				$parent_id = $price_data['parent_id'];
+
+				$this->apply_variation_price( (int) $variation_id, $price );
+
 				if ( $parent_id ) {
 					$parent_ids[ $parent_id ] = $parent_id;
 				}
@@ -82,12 +88,8 @@ class Batch_Processor {
 				$this->logger->log( sprintf( 'No variation prices calculated. queue_id=%d input_sku=%s', absint( $job->id ), $job->base_sku ) );
 			}
 
-			foreach ( $parent_ids as $parent_id ) {
-				// WooCommerce API sync refreshes lookup tables, variation price indexes, transients, REST responses, and cart/catalog reads.
-				do_action( 'woocommerce_variable_product_sync_data', $parent_id );
-				\WC_Product_Variable::sync( $parent_id );
-				wc_delete_product_transients( $parent_id );
-				wc_update_product_lookup_tables( $parent_id );
+			if ( $sync_parent ) {
+				$this->sync_parent_products( $parent_ids );
 			}
 
 			$this->queue_manager->update_status( $job->id, 'done' );
@@ -96,5 +98,50 @@ class Batch_Processor {
 			$this->queue_manager->update_status( $job->id, 'failed', $message );
 			$this->logger->log( $message );
 		}
+
+		return $parent_ids;
+	}
+
+	private function get_batch_size() {
+		$size = defined( 'MGMP_BATCH_SIZE' ) ? (int) \MGMP_BATCH_SIZE : 50;
+		return min( 100, max( 1, (int) apply_filters( 'mgmp_batch_size', $size ) ) );
+	}
+
+	private function begin_fast_updates() {
+		wp_suspend_cache_invalidation( true );
+		wp_defer_term_counting( true );
+		if ( function_exists( 'wc_defer_product_sync' ) ) {
+			wc_defer_product_sync( true );
+		}
+	}
+
+	/**
+	 * @param array<int,int> $parent_ids Parent product IDs keyed by themselves.
+	 */
+	private function end_fast_updates( array $parent_ids ) {
+		if ( function_exists( 'wc_defer_product_sync' ) ) {
+			wc_defer_product_sync( false );
+		}
+		wp_defer_term_counting( false );
+		wp_suspend_cache_invalidation( false );
+		$this->sync_parent_products( $parent_ids );
+	}
+
+	/**
+	 * @param array<int,int> $parent_ids Parent product IDs keyed by themselves.
+	 */
+	private function sync_parent_products( array $parent_ids ) {
+		foreach ( $parent_ids as $parent_id ) {
+			\WC_Product_Variable::sync( $parent_id );
+			wc_delete_product_transients( $parent_id );
+		}
+	}
+
+	private function apply_variation_price( $variation_id, $price ) {
+		$formatted = wc_format_decimal( $price );
+		update_post_meta( $variation_id, '_regular_price', $formatted );
+		update_post_meta( $variation_id, '_price', $formatted );
+		clean_post_cache( $variation_id );
+		wc_delete_product_transients( $variation_id );
 	}
 }

@@ -26,6 +26,8 @@ register_activation_hook(__FILE__, static function () {
 		define('MGMP_VERSION', ATRISHAWOO_VERSION);
 		define('MGMP_TABLE_NAME', 'perfume_price_jobs');
 		define('MGMP_BATCH_HOOK', 'atrishawoo_perfume_price_batch_worker');
+		define('MGMP_BATCH_SIZE', 50);
+		define('MGMP_PRICE_ROUND_STEP', 1000);
 		define('MGMP_ASSETS_DIR', ATRISHAWOO_PATH . 'assets/price-calculator/');
 		define('MGMP_ASSETS_URL', ATRISHAWOO_URL . 'assets/price-calculator/');
 	}
