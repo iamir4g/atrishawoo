@@ -1,0 +1,8 @@
+.mgmp-wrap { margin: 0; }
+#mgmp-admin-root { direction: ltr; min-height: 720px; }
+.atrishawoo-price-tab #mgmp-admin-root { min-height: 720px; }
+#mgmp-admin-root .MuiDrawer-paper { top: 32px; height: calc(100% - 32px); }
+@media (max-width: 782px) {
+	#mgmp-admin-root .MuiDrawer-paper { top: 46px; height: calc(100% - 46px); }
+}
+#mgmp-admin-root * { box-sizing: border-box; }

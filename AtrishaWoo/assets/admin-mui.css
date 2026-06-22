@@ -1,0 +1,38 @@
+.atrishawoo-mui-page .wrap {
+	margin-top: 12px;
+}
+
+.atrishawoo-mui-panel {
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	padding: 16px;
+	margin-top: 12px;
+}
+
+.atrishawoo-mui-page .atrishawoo-card {
+	border-radius: 12px;
+	border-color: #e5e7eb;
+}
+
+.atrishawoo-price-tab {
+	margin-top: 12px;
+}
+
+.atrishawoo-price-tab #mgmp-admin-root {
+	min-height: 720px;
+	direction: ltr;
+}
+
+.atrishawoo-price-tab #mgmp-admin-root .MuiDrawer-paper {
+	position: fixed;
+	top: 32px;
+	height: calc(100% - 32px);
+}
+
+@media (max-width: 782px) {
+	.atrishawoo-price-tab #mgmp-admin-root .MuiDrawer-paper {
+		top: 46px;
+		height: calc(100% - 46px);
+	}
+}

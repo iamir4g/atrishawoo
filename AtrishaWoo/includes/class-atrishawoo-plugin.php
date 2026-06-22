@@ -34,9 +34,11 @@ final class AtrishaWoo_Plugin {
 		require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-sku-generator.php';
 		require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-order-label.php';
 		require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-recommendation-engine.php';
+		require_once ATRISHAWOO_PATH . 'includes/class-atrishawoo-price-calculator.php';
 		require_once ATRISHAWOO_PATH . 'admin/class-atrishawoo-admin.php';
 
 		AtrishaWoo_Recommendation_Engine::init();
+		AtrishaWoo_Price_Calculator::init();
 		AtrishaWoo_Admin::instance()->init();
 	}
 }

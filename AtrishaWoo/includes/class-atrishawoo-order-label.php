@@ -132,6 +132,11 @@ final class AtrishaWoo_Order_Label {
 		$settings['padding_mm'] = self::clamp_int((int) $settings['padding_mm'], 0, 20);
 		$settings['font_size_pt'] = self::clamp_int((int) $settings['font_size_pt'], 6, 24);
 		$settings['line_height'] = self::clamp_float((float) $settings['line_height'], 0.8, 3.0);
+		$settings['font_family'] = self::sanitize_font_family(isset($settings['font_family']) ? (string) $settings['font_family'] : '');
+		$settings['direction'] = isset($settings['direction']) ? (string) $settings['direction'] : 'rtl';
+		$settings['direction'] = in_array($settings['direction'], ['rtl', 'ltr'], true) ? $settings['direction'] : 'rtl';
+		$settings['text_align'] = isset($settings['text_align']) ? (string) $settings['text_align'] : 'right';
+		$settings['text_align'] = in_array($settings['text_align'], ['right', 'center', 'left', 'justify'], true) ? $settings['text_align'] : 'right';
 		$settings['font_weight'] = isset($settings['font_weight']) ? (string) $settings['font_weight'] : 'normal';
 		$settings['font_weight'] = $settings['font_weight'] === 'bold' ? 'bold' : 'normal';
 		$settings['font_style'] = isset($settings['font_style']) ? (string) $settings['font_style'] : 'normal';
@@ -139,8 +144,11 @@ final class AtrishaWoo_Order_Label {
 		$settings['word_spacing_px'] = self::clamp_float((float) ($settings['word_spacing_px'] ?? 0.0), 0.0, 20.0);
 		$settings['letter_spacing_px'] = self::clamp_float((float) ($settings['letter_spacing_px'] ?? 0.0), -2.0, 10.0);
 
-		$settings['items_override_text'] = isset($settings['items_override_text']) ? (string) $settings['items_override_text'] : '';
-		$settings['items_override_text'] = trim(str_replace(["\r\n", "\r"], "\n", $settings['items_override_text']));
+		$settings['preview_override_text'] = isset($settings['preview_override_text']) ? (string) $settings['preview_override_text'] : '';
+		$settings['preview_override_text'] = trim(str_replace(["\r\n", "\r"], "\n", $settings['preview_override_text']));
+		if (strlen($settings['preview_override_text']) > 20000) {
+			$settings['preview_override_text'] = substr($settings['preview_override_text'], 0, 20000);
+		}
 
 		$settings['template_text'] = isset($settings['template_text']) ? (string) $settings['template_text'] : '';
 		$settings['template_text'] = trim(str_replace(["\r\n", "\r"], "\n", $settings['template_text']));
@@ -216,6 +224,9 @@ final class AtrishaWoo_Order_Label {
 		$padding = (int) $settings['padding_mm'];
 		$font_size = (int) $settings['font_size_pt'];
 		$line_height = (float) $settings['line_height'];
+		$direction = (string) ($settings['direction'] ?? 'rtl');
+		$text_align = (string) ($settings['text_align'] ?? 'right');
+		$font_family = self::sanitize_font_family((string) ($settings['font_family'] ?? ''));
 		$font_weight = (string) ($settings['font_weight'] ?? 'normal');
 		$font_style = (string) ($settings['font_style'] ?? 'normal');
 		$word_spacing = (float) ($settings['word_spacing_px'] ?? 0.0);
@@ -224,10 +235,10 @@ final class AtrishaWoo_Order_Label {
 		$css = "
 			@page { margin: 0; }
 			html, body { margin: 0; padding: 0; }
-			body { direction: rtl; font-family: Tahoma, Arial, sans-serif; }
+			body { direction: {$direction}; font-family: {$font_family}; }
 			.atrishawoo-label { width: {$width}mm; height: {$height}mm; padding: {$padding}mm; box-sizing: border-box; overflow: hidden; }
 			.atrishawoo-label * { box-sizing: border-box; }
-			.atrishawoo-label .atrishawoo-line { font-size: {$font_size}pt; line-height: {$line_height}; font-weight: {$font_weight}; font-style: {$font_style}; word-spacing: {$word_spacing}px; letter-spacing: {$letter_spacing}px; margin: 0 0 1.5mm 0; white-space: pre-wrap; word-break: break-word; }
+			.atrishawoo-label .atrishawoo-line { font-size: {$font_size}pt; line-height: {$line_height}; font-weight: {$font_weight}; font-style: {$font_style}; word-spacing: {$word_spacing}px; letter-spacing: {$letter_spacing}px; text-align: {$text_align}; margin: 0 0 1.5mm 0; white-space: pre-wrap; word-break: break-word; }
 			.atrishawoo-label .atrishawoo-header { font-weight: 700; margin-bottom: 2mm; }
 		";
 
@@ -244,9 +255,24 @@ final class AtrishaWoo_Order_Label {
 
 	private static function build_lines($order, array $settings): array {
 		$order = (is_object($order) && is_a($order, 'WC_Order')) ? $order : null;
+		$preview_override_text = trim((string) ($settings['preview_override_text'] ?? ''));
 		$template_text = trim((string) ($settings['template_text'] ?? ''));
 		$fields = isset($settings['fields']) && is_array($settings['fields']) ? $settings['fields'] : [];
 		$manual_text = trim((string) ($settings['manual_text'] ?? ''));
+
+		if ($preview_override_text !== '') {
+			$raw_lines = preg_split("/\\r\\n|\\r|\\n/u", $preview_override_text) ?: [];
+			$lines = [];
+			foreach ($raw_lines as $line) {
+				$line = (string) $line;
+				if ($line === '') {
+					$lines[] = '';
+					continue;
+				}
+				$lines[] = rtrim($line);
+			}
+			return $lines;
+		}
 
 		if ($template_text !== '') {
 			$text = self::apply_template($template_text, $order, $settings);
@@ -378,12 +404,15 @@ final class AtrishaWoo_Order_Label {
 		$padding = (int) $settings['padding_mm'];
 		$font_size = (int) $settings['font_size_pt'];
 		$line_height = (float) $settings['line_height'];
+		$direction = (string) ($settings['direction'] ?? 'rtl');
+		$text_align = (string) ($settings['text_align'] ?? 'right');
+		$font_family = self::sanitize_font_family((string) ($settings['font_family'] ?? ''));
 		$font_weight = (string) ($settings['font_weight'] ?? 'normal');
 		$font_style = (string) ($settings['font_style'] ?? 'normal');
 		$word_spacing = (float) ($settings['word_spacing_px'] ?? 0.0);
 		$letter_spacing = (float) ($settings['letter_spacing_px'] ?? 0.0);
 		$style = 'width:' . $width . 'mm;height:' . $height . 'mm;padding:' . $padding . 'mm;font-size:' . $font_size . 'pt;';
-		$style .= 'box-sizing:border-box;overflow:hidden;direction:rtl;font-family:Tahoma,Arial,sans-serif;';
+		$style .= 'box-sizing:border-box;overflow:hidden;direction:' . $direction . ';text-align:' . $text_align . ';font-family:' . $font_family . ';';
 		if ($for_preview) {
 			$style .= 'border:1px solid #ccd0d4;background:#fff;';
 		}
@@ -392,7 +421,7 @@ final class AtrishaWoo_Order_Label {
 
 		foreach ($lines as $line) {
 			$line = (string) $line;
-			$line_style = 'line-height:' . $line_height . ';font-weight:' . $font_weight . ';font-style:' . $font_style . ';word-spacing:' . $word_spacing . 'px;letter-spacing:' . $letter_spacing . 'px;margin:0 0 1.5mm 0;white-space:pre-wrap;word-break:break-word;';
+			$line_style = 'line-height:' . $line_height . ';font-weight:' . $font_weight . ';font-style:' . $font_style . ';word-spacing:' . $word_spacing . 'px;letter-spacing:' . $letter_spacing . 'px;text-align:' . $text_align . ';margin:0 0 1.5mm 0;white-space:pre-wrap;word-break:break-word;';
 			if ($line === '') {
 				$html .= '<div class="atrishawoo-line" style="' . esc_attr($line_style) . '">&nbsp;</div>';
 				continue;
@@ -412,6 +441,9 @@ final class AtrishaWoo_Order_Label {
 			'padding_mm' => 3,
 			'font_size_pt' => 11,
 			'line_height' => 1.25,
+			'font_family' => 'Tahoma, Arial, sans-serif',
+			'direction' => 'rtl',
+			'text_align' => 'right',
 			'font_weight' => 'normal',
 			'font_style' => 'normal',
 			'word_spacing_px' => 0,
@@ -570,11 +602,6 @@ final class AtrishaWoo_Order_Label {
 			$total_qty = (string) $total_qty_int;
 		}
 
-		$items_override = isset($settings['items_override_text']) ? trim((string) $settings['items_override_text']) : '';
-		if ($items_override !== '') {
-			$items_text = $items_override;
-		}
-
 		return [
 			'{name}' => $recipient,
 			'{phonenumber}' => $phone,
@@ -616,6 +643,22 @@ final class AtrishaWoo_Order_Label {
 		}
 		if ($value > $max) {
 			return $max;
+		}
+		return $value;
+	}
+
+	private static function sanitize_font_family(string $value): string {
+		$value = trim(str_replace(["\r\n", "\r", "\n"], ' ', $value));
+		if ($value === '') {
+			return 'Tahoma, Arial, sans-serif';
+		}
+		$value = preg_replace('/[^a-zA-Z0-9\\s,\\-_"\\\']+/u', '', $value);
+		$value = is_string($value) ? trim($value) : '';
+		if ($value === '') {
+			return 'Tahoma, Arial, sans-serif';
+		}
+		if (strlen($value) > 120) {
+			$value = substr($value, 0, 120);
 		}
 		return $value;
 	}

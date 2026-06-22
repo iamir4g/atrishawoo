@@ -50,10 +50,97 @@ final class AtrishaWoo_Admin {
 			'dashicons-tag',
 			56
 		);
+
+		add_submenu_page(
+			'atrishawoo',
+			'تولید SKU',
+			'تولید SKU',
+			'manage_woocommerce',
+			'atrishawoo',
+			[$this, 'render_page']
+		);
+
+		add_submenu_page(
+			'atrishawoo',
+			'لیبل سفارش',
+			'لیبل سفارش',
+			'manage_woocommerce',
+			'atrishawoo-label',
+			[$this, 'render_page']
+		);
+
+		add_submenu_page(
+			'atrishawoo',
+			'محاسبه قیمت',
+			'محاسبه قیمت',
+			'manage_woocommerce',
+			'atrishawoo-price',
+			[$this, 'render_page']
+		);
+	}
+
+	public static function is_admin_screen(string $hook): bool {
+		return in_array($hook, [
+			'toplevel_page_atrishawoo',
+			'atrishawoo_page_atrishawoo-label',
+			'atrishawoo_page_atrishawoo-price',
+		], true);
+	}
+
+	private function resolve_active_tab(): string {
+		$page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : 'atrishawoo';
+
+		if ($page === 'atrishawoo-label') {
+			return 'label';
+		}
+
+		if ($page === 'atrishawoo-price') {
+			return 'price';
+		}
+
+		if (isset($_GET['tab'])) {
+			$tab = sanitize_key(wp_unslash($_GET['tab']));
+			if (in_array($tab, ['sku', 'label', 'price'], true)) {
+				return $tab;
+			}
+		}
+
+		return 'sku';
+	}
+
+	private function render_nav_tabs(string $active_tab): void {
+		$tabs = [
+			'sku' => [
+				'label' => 'تولید SKU',
+				'url' => admin_url('admin.php?page=atrishawoo'),
+			],
+			'label' => [
+				'label' => 'لیبل سفارش',
+				'url' => admin_url('admin.php?page=atrishawoo-label'),
+			],
+			'price' => [
+				'label' => 'محاسبه قیمت',
+				'url' => admin_url('admin.php?page=atrishawoo-price'),
+			],
+		];
+
+		echo '<h1>AtrishaWoo</h1>';
+		echo '<h2 class="nav-tab-wrapper">';
+		foreach ($tabs as $id => $tab) {
+			$class = ($active_tab === $id) ? ' nav-tab-active' : '';
+			echo '<a class="nav-tab' . esc_attr($class) . '" href="' . esc_url($tab['url']) . '">' . esc_html($tab['label']) . '</a>';
+		}
+		echo '</h2>';
 	}
 
 	public function enqueue_assets(string $hook): void {
-		if ($hook !== 'toplevel_page_atrishawoo') {
+		if (!self::is_admin_screen($hook)) {
+			return;
+		}
+
+		$active_tab = $this->resolve_active_tab();
+
+		if ($active_tab === 'price') {
 			return;
 		}
 
@@ -84,17 +171,10 @@ final class AtrishaWoo_Admin {
 			wp_die('Access denied');
 		}
 
-		$active_tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : 'sku';
-		if (!in_array($active_tab, ['sku', 'label'], true)) {
-			$active_tab = 'sku';
-		}
+		$active_tab = $this->resolve_active_tab();
 
-		echo '<div class="wrap">';
-		echo '<h1>AtrishaWoo</h1>';
-		echo '<h2 class="nav-tab-wrapper">';
-		echo '<a class="nav-tab' . ($active_tab === 'sku' ? ' nav-tab-active' : '') . '" href="' . esc_url(admin_url('admin.php?page=atrishawoo&tab=sku')) . '">SKU</a>';
-		echo '<a class="nav-tab' . ($active_tab === 'label' ? ' nav-tab-active' : '') . '" href="' . esc_url(admin_url('admin.php?page=atrishawoo&tab=label')) . '">لیبل سفارش</a>';
-		echo '</h2>';
+		echo '<div class="wrap atrishawoo-mui-page">';
+		$this->render_nav_tabs($active_tab);
 
 		echo '<style>
 			.atrishawoo-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
@@ -102,6 +182,14 @@ final class AtrishaWoo_Admin {
 			.atrishawoo-card{background:#fff;border:1px solid #ccd0d4;border-radius:6px;padding:16px;}
 			.atrishawoo-preview-wrap{background:#f6f7f7;border:1px dashed #c3c4c7;border-radius:6px;padding:12px;overflow:auto;}
 		</style>';
+
+		if ($active_tab === 'price') {
+			AtrishaWoo_Price_Calculator::render_tab();
+			echo '</div>';
+			return;
+		}
+
+		echo '<div class="atrishawoo-mui-panel">';
 
 		if ($active_tab === 'sku') {
 			$job = AtrishaWoo_Sku_Generator::get_job();
@@ -130,6 +218,7 @@ final class AtrishaWoo_Admin {
 			echo '</p>';
 
 			echo '<div id="atrishawoo-status" style="margin-top:12px;"></div>';
+			echo '</div>';
 			echo '</div>';
 			return;
 		}
@@ -170,19 +259,33 @@ final class AtrishaWoo_Admin {
 		echo '</td></tr>';
 		echo '</tbody></table>';
 
+		echo '<h2 class="nav-tab-wrapper" style="margin-top:10px;">';
+		echo '<a href="#" class="nav-tab nav-tab-active atrishawoo-label-subtab" data-subtab="content">محتوا</a>';
+		echo '<a href="#" class="nav-tab atrishawoo-label-subtab" data-subtab="format">ظاهر</a>';
+		echo '</h2>';
+
+		echo '<div id="atrishawoo-label-subtab-content">';
 		echo '<table class="form-table" role="presentation"><tbody>';
-		echo '<tr><th scope="row">سفارش</th><td><input type="hidden" id="atrishawoo-label-order-id" value="' . esc_attr((string) ($order_id_prefill > 0 ? $order_id_prefill : '')) . '" /><span id="atrishawoo-label-order-selected" style="color:#646970;">از جدول «آخرین سفارش‌ها» انتخاب کنید</span></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-width">عرض (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-width" min="20" max="200" value="' . esc_attr((string) $settings['width_mm']) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-height">ارتفاع (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-height" min="10" max="200" value="' . esc_attr((string) $settings['height_mm']) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-padding">حاشیه داخلی (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-padding" min="0" max="20" value="' . esc_attr((string) $settings['padding_mm']) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-font">سایز فونت (pt)</label></th><td><input type="number" id="atrishawoo-label-font" min="6" max="24" value="' . esc_attr((string) $settings['font_size_pt']) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-line-height">ارتفاع خط (Line height)</label></th><td><input type="number" id="atrishawoo-label-line-height" step="0.05" min="0.8" max="3" value="' . esc_attr((string) ($settings['line_height'] ?? 1.25)) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-font-weight">ضخامت</label></th><td><select id="atrishawoo-label-font-weight"><option value="normal"' . selected((string) ($settings['font_weight'] ?? 'normal'), 'normal', false) . '>Normal</option><option value="bold"' . selected((string) ($settings['font_weight'] ?? 'normal'), 'bold', false) . '>Bold</option></select></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-font-style">استایل</label></th><td><select id="atrishawoo-label-font-style"><option value="normal"' . selected((string) ($settings['font_style'] ?? 'normal'), 'normal', false) . '>Normal</option><option value="italic"' . selected((string) ($settings['font_style'] ?? 'normal'), 'italic', false) . '>Italic</option></select></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-word-spacing">فاصله بین کلمات (px)</label></th><td><input type="number" id="atrishawoo-label-word-spacing" step="0.5" min="0" max="20" value="' . esc_attr((string) ($settings['word_spacing_px'] ?? 0)) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-letter-spacing">فاصله بین حروف (px)</label></th><td><input type="number" id="atrishawoo-label-letter-spacing" step="0.5" min="-2" max="10" value="' . esc_attr((string) ($settings['letter_spacing_px'] ?? 0)) . '" /></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-template">متن لیبل</label></th><td><textarea id="atrishawoo-label-template" rows="8" class="large-text code" placeholder="مثلاً:&#10;گیرنده&#10;{name} محترم&#10;{phonenumber}&#10;آدرس: {address}">' . esc_textarea((string) ($settings['template_text'] ?? '')) . '</textarea></td></tr>';
-		echo '<tr><th scope="row"><label for="atrishawoo-label-items-override">اقلام سفارش (قابل ویرایش)</label></th><td><textarea id="atrishawoo-label-items-override" rows="4" class="large-text code" placeholder="اختیاری: اگر اینجا چیزی بنویسید، {items} از همین متن استفاده می‌کند.">' . esc_textarea((string) ($settings['items_override_text'] ?? '')) . '</textarea></td></tr>';
+		echo '<tr><th scope="row">سفارش</th><td><input type="hidden" id="atrishawoo-label-order-id" value="' . esc_attr((string) ($order_id_prefill > 0 ? $order_id_prefill : '')) . '" /><span id="atrishawoo-label-order-selected" style="color:#646970;">از جدول «سفارش‌ها» انتخاب کنید</span></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-template">متن لیبل</label></th><td>';
+		echo '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px 0;">';
+		echo '<select id="atrishawoo-label-font-family" style="min-width:220px;">';
+		echo '<option value="Tahoma, Arial, sans-serif"' . selected((string) ($settings['font_family'] ?? ''), 'Tahoma, Arial, sans-serif', false) . '>Tahoma / Arial</option>';
+		echo '<option value="Arial, sans-serif"' . selected((string) ($settings['font_family'] ?? ''), 'Arial, sans-serif', false) . '>Arial</option>';
+		echo '<option value="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"' . selected((string) ($settings['font_family'] ?? ''), 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif', false) . '>System UI</option>';
+		echo '<option value="serif"' . selected((string) ($settings['font_family'] ?? ''), 'serif', false) . '>Serif</option>';
+		echo '<option value="monospace"' . selected((string) ($settings['font_family'] ?? ''), 'monospace', false) . '>Monospace</option>';
+		echo '</select>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="bold">B</button>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="italic">I</button>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="align-right">راست</button>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="align-center">وسط</button>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="align-left">چپ</button>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="dir-rtl">RTL</button>';
+		echo '<button type="button" class="button atrishawoo-toolbar" data-action="dir-ltr">LTR</button>';
+		echo '</div>';
+		echo '<textarea id="atrishawoo-label-template" rows="8" class="large-text code" placeholder="مثلاً:&#10;گیرنده&#10;{name} محترم&#10;{phonenumber}&#10;آدرس: {address}">' . esc_textarea((string) ($settings['template_text'] ?? '')) . '</textarea>';
+		echo '</td></tr>';
 		echo '</tbody></table>';
 
 		echo '<h3>Placeholderها</h3>';
@@ -200,8 +303,26 @@ final class AtrishaWoo_Admin {
 		echo '<div id="atrishawoo-label-msg" style="margin-top:10px;"></div>';
 		echo '</div>';
 
+		echo '<div id="atrishawoo-label-subtab-format" style="display:none;">';
+		echo '<table class="form-table" role="presentation"><tbody>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-width">عرض (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-width" min="20" max="200" value="' . esc_attr((string) $settings['width_mm']) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-height">ارتفاع (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-height" min="10" max="200" value="' . esc_attr((string) $settings['height_mm']) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-padding">حاشیه داخلی (میلی‌متر)</label></th><td><input type="number" id="atrishawoo-label-padding" min="0" max="20" value="' . esc_attr((string) $settings['padding_mm']) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-font">سایز فونت (pt)</label></th><td><input type="number" id="atrishawoo-label-font" min="6" max="24" value="' . esc_attr((string) $settings['font_size_pt']) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-line-height">ارتفاع خط (Line height)</label></th><td><input type="number" id="atrishawoo-label-line-height" step="0.05" min="0.8" max="3" value="' . esc_attr((string) ($settings['line_height'] ?? 1.25)) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-direction">جهت</label></th><td><select id="atrishawoo-label-direction"><option value="rtl"' . selected((string) ($settings['direction'] ?? 'rtl'), 'rtl', false) . '>RTL</option><option value="ltr"' . selected((string) ($settings['direction'] ?? 'rtl'), 'ltr', false) . '>LTR</option></select></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-text-align">تراز</label></th><td><select id="atrishawoo-label-text-align"><option value="right"' . selected((string) ($settings['text_align'] ?? 'right'), 'right', false) . '>راست</option><option value="center"' . selected((string) ($settings['text_align'] ?? 'right'), 'center', false) . '>وسط</option><option value="left"' . selected((string) ($settings['text_align'] ?? 'right'), 'left', false) . '>چپ</option><option value="justify"' . selected((string) ($settings['text_align'] ?? 'right'), 'justify', false) . '>Justify</option></select></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-font-weight">ضخامت</label></th><td><select id="atrishawoo-label-font-weight"><option value="normal"' . selected((string) ($settings['font_weight'] ?? 'normal'), 'normal', false) . '>Normal</option><option value="bold"' . selected((string) ($settings['font_weight'] ?? 'normal'), 'bold', false) . '>Bold</option></select></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-font-style">استایل</label></th><td><select id="atrishawoo-label-font-style"><option value="normal"' . selected((string) ($settings['font_style'] ?? 'normal'), 'normal', false) . '>Normal</option><option value="italic"' . selected((string) ($settings['font_style'] ?? 'normal'), 'italic', false) . '>Italic</option></select></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-word-spacing">فاصله بین کلمات (px)</label></th><td><input type="number" id="atrishawoo-label-word-spacing" step="0.5" min="0" max="20" value="' . esc_attr((string) ($settings['word_spacing_px'] ?? 0)) . '" /></td></tr>';
+		echo '<tr><th scope="row"><label for="atrishawoo-label-letter-spacing">فاصله بین حروف (px)</label></th><td><input type="number" id="atrishawoo-label-letter-spacing" step="0.5" min="-2" max="10" value="' . esc_attr((string) ($settings['letter_spacing_px'] ?? 0)) . '" /></td></tr>';
+		echo '</tbody></table>';
+		echo '</div>';
+		echo '</div>';
+
 		echo '<div class="atrishawoo-card">';
 		echo '<h3>پیش‌نمایش</h3>';
+		echo '<div style="color:#646970;margin:6px 0 10px 0;">روی پیش‌نمایش کلیک کنید و متن را همانجا ویرایش کنید؛ چاپ همان نسخه ویرایش‌شده انجام می‌شود.</div>';
 		echo '<div class="atrishawoo-preview-wrap"><div id="atrishawoo-label-preview"></div></div>';
 		echo '</div>';
 
@@ -218,6 +339,8 @@ final class AtrishaWoo_Admin {
 		echo '<div id="atrishawoo-orders-table"></div>';
 		echo '</div>';
 
+		echo '</div>';
+		echo '</div>';
 		echo '</div>';
 	}
 
@@ -546,7 +669,10 @@ final class AtrishaWoo_Admin {
 		]);
 	}
 
-	public function add_order_row_action(array $actions, WC_Order $order): array {
+	public function add_order_row_action(array $actions, $order): array {
+		if (!is_object($order) || !is_a($order, 'WC_Order')) {
+			return $actions;
+		}
 		if (!current_user_can('manage_woocommerce')) {
 			return $actions;
 		}
@@ -554,8 +680,7 @@ final class AtrishaWoo_Admin {
 		$preset = AtrishaWoo_Order_Label::get_default_preset_id();
 		$url = add_query_arg(
 			[
-				'page' => 'atrishawoo',
-				'tab' => 'label',
+				'page' => 'atrishawoo-label',
 				'order_id' => (int) $order->get_id(),
 				'preset' => $preset,
 			],
@@ -585,17 +710,19 @@ final class AtrishaWoo_Admin {
 
 	function getLabelSettingsFromForm(){
 		return {
+			font_family: $('#atrishawoo-label-font-family').val(),
 			width_mm: parseInt($('#atrishawoo-label-width').val(), 10),
 			height_mm: parseInt($('#atrishawoo-label-height').val(), 10),
 			padding_mm: parseInt($('#atrishawoo-label-padding').val(), 10),
 			font_size_pt: parseInt($('#atrishawoo-label-font').val(), 10),
 			line_height: parseFloat($('#atrishawoo-label-line-height').val()),
+			direction: $('#atrishawoo-label-direction').val(),
+			text_align: $('#atrishawoo-label-text-align').val(),
 			font_weight: $('#atrishawoo-label-font-weight').val(),
 			font_style: $('#atrishawoo-label-font-style').val(),
 			word_spacing_px: parseFloat($('#atrishawoo-label-word-spacing').val()),
 			letter_spacing_px: parseFloat($('#atrishawoo-label-letter-spacing').val()),
-			template_text: $('#atrishawoo-label-template').val(),
-			items_override_text: $('#atrishawoo-label-items-override').val()
+			template_text: $('#atrishawoo-label-template').val()
 		};
 	}
 
@@ -746,6 +873,7 @@ final class AtrishaWoo_Admin {
 	}
 
 	function labelPreview(){
+		previewDirty = false;
 		var settings = getLabelSettingsFromForm();
 		var orderId = parseInt($('#atrishawoo-label-order-id').val(), 10) || 0;
 
@@ -757,23 +885,66 @@ final class AtrishaWoo_Admin {
 				return;
 			}
 			$('#atrishawoo-label-preview').html(resp.data.html || '');
+			$('#atrishawoo-label-preview .atrishawoo-label').attr('contenteditable', 'true');
+			applyPreviewStyles();
 			setLabelMsg('آماده');
 		});
 	}
 
+	var previewDirty = false;
+
+	function getPreviewOverrideText(){
+		var el = $('#atrishawoo-label-preview .atrishawoo-label').get(0);
+		if (!el) return '';
+		var text = el.innerText || '';
+		text = text.replace(/\r\n/g, '\n');
+		return text;
+	}
+
+	function applyPreviewStyles(){
+		var settings = getLabelSettingsFromForm();
+		var label = $('#atrishawoo-label-preview .atrishawoo-label');
+		if (!label.length) return;
+
+		var w = settings.width_mm;
+		var h = settings.height_mm;
+		var p = settings.padding_mm;
+		var fs = settings.font_size_pt;
+
+		if (typeof w === 'number' && !isNaN(w)) label.css('width', w + 'mm');
+		if (typeof h === 'number' && !isNaN(h)) label.css('height', h + 'mm');
+		if (typeof p === 'number' && !isNaN(p)) label.css('padding', p + 'mm');
+		if (typeof fs === 'number' && !isNaN(fs)) label.css('font-size', fs + 'pt');
+		if (settings.font_family) label.css('font-family', settings.font_family);
+		if (settings.direction) label.css('direction', settings.direction);
+		if (settings.text_align) label.css('text-align', settings.text_align);
+
+		var lineStyle = {
+			lineHeight: String(settings.line_height || 1.25),
+			fontWeight: settings.font_weight || 'normal',
+			fontStyle: settings.font_style || 'normal',
+			wordSpacing: String(settings.word_spacing_px || 0) + 'px',
+			letterSpacing: String(settings.letter_spacing_px || 0) + 'px',
+			textAlign: settings.text_align || 'right'
+		};
+		label.find('.atrishawoo-line').css(lineStyle);
+	}
+
 	function setLabelFormSettings(settings){
 		if (!settings) return;
+		$('#atrishawoo-label-font-family').val(settings.font_family || 'Tahoma, Arial, sans-serif');
 		$('#atrishawoo-label-width').val(settings.width_mm);
 		$('#atrishawoo-label-height').val(settings.height_mm);
 		$('#atrishawoo-label-padding').val(settings.padding_mm);
 		$('#atrishawoo-label-font').val(settings.font_size_pt);
 		$('#atrishawoo-label-line-height').val(settings.line_height);
+		$('#atrishawoo-label-direction').val(settings.direction || 'rtl');
+		$('#atrishawoo-label-text-align').val(settings.text_align || 'right');
 		$('#atrishawoo-label-font-weight').val(settings.font_weight || 'normal');
 		$('#atrishawoo-label-font-style').val(settings.font_style || 'normal');
 		$('#atrishawoo-label-word-spacing').val(settings.word_spacing_px);
 		$('#atrishawoo-label-letter-spacing').val(settings.letter_spacing_px);
 		$('#atrishawoo-label-template').val(settings.template_text || '');
-		$('#atrishawoo-label-items-override').val(settings.items_override_text || '');
 	}
 
 	function rebuildPresetSelect(){
@@ -871,6 +1042,7 @@ final class AtrishaWoo_Admin {
 	function labelPrint(orderIdOverride){
 		var settings = getLabelSettingsFromForm();
 		var orderId = (typeof orderIdOverride === 'number') ? orderIdOverride : (parseInt($('#atrishawoo-label-order-id').val(), 10) || 0);
+		settings.preview_override_text = getPreviewOverrideText();
 
 		if (!window.AtrishaWooSku || !window.AtrishaWooSku.printPostUrl || !window.AtrishaWooSku.printPostNonce) {
 			setLabelMsg('تنظیمات چاپ آماده نیست', 'error');
@@ -930,6 +1102,69 @@ final class AtrishaWoo_Admin {
 		if ($('#atrishawoo-label-preview-btn').length) {
 			rebuildPresetSelect();
 
+			function setLabelSubtab(name){
+				var isFormat = name === 'format';
+				$('#atrishawoo-label-subtab-content').toggle(!isFormat);
+				$('#atrishawoo-label-subtab-format').toggle(isFormat);
+				$('.atrishawoo-label-subtab').removeClass('nav-tab-active');
+				$('.atrishawoo-label-subtab[data-subtab="' + name + '"]').addClass('nav-tab-active');
+			}
+
+			$(document).on('click', '.atrishawoo-label-subtab', function(e){
+				e.preventDefault();
+				var name = $(this).data('subtab') || 'content';
+				setLabelSubtab(String(name));
+			});
+
+			function syncToolbarState(){
+				var fw = $('#atrishawoo-label-font-weight').val() || 'normal';
+				var fs = $('#atrishawoo-label-font-style').val() || 'normal';
+				var align = $('#atrishawoo-label-text-align').val() || 'right';
+				var dir = $('#atrishawoo-label-direction').val() || 'rtl';
+
+				$('.atrishawoo-toolbar').removeClass('button-primary');
+				if (fw === 'bold') $('.atrishawoo-toolbar[data-action="bold"]').addClass('button-primary');
+				if (fs === 'italic') $('.atrishawoo-toolbar[data-action="italic"]').addClass('button-primary');
+				if (align === 'right') $('.atrishawoo-toolbar[data-action="align-right"]').addClass('button-primary');
+				if (align === 'center') $('.atrishawoo-toolbar[data-action="align-center"]').addClass('button-primary');
+				if (align === 'left') $('.atrishawoo-toolbar[data-action="align-left"]').addClass('button-primary');
+				if (dir === 'rtl') $('.atrishawoo-toolbar[data-action="dir-rtl"]').addClass('button-primary');
+				if (dir === 'ltr') $('.atrishawoo-toolbar[data-action="dir-ltr"]').addClass('button-primary');
+			}
+
+			$(document).on('click', '.atrishawoo-toolbar', function(e){
+				e.preventDefault();
+				var action = String($(this).data('action') || '');
+				if (!action) return;
+
+				if (action === 'bold') {
+					var cur = $('#atrishawoo-label-font-weight').val() || 'normal';
+					$('#atrishawoo-label-font-weight').val(cur === 'bold' ? 'normal' : 'bold');
+				} else if (action === 'italic') {
+					var curi = $('#atrishawoo-label-font-style').val() || 'normal';
+					$('#atrishawoo-label-font-style').val(curi === 'italic' ? 'normal' : 'italic');
+				} else if (action === 'align-right') {
+					$('#atrishawoo-label-text-align').val('right');
+				} else if (action === 'align-center') {
+					$('#atrishawoo-label-text-align').val('center');
+				} else if (action === 'align-left') {
+					$('#atrishawoo-label-text-align').val('left');
+				} else if (action === 'dir-rtl') {
+					$('#atrishawoo-label-direction').val('rtl');
+				} else if (action === 'dir-ltr') {
+					$('#atrishawoo-label-direction').val('ltr');
+				}
+
+				syncToolbarState();
+				schedulePreview();
+			});
+
+			$(document).on('input', '#atrishawoo-label-preview .atrishawoo-label', function(){
+				previewDirty = true;
+				applyPreviewStyles();
+				setLabelMsg('پیش‌نمایش ویرایش شد');
+			});
+
 			var orderFromUrl = parseInt(getQueryParam('order_id'), 10) || 0;
 			if (orderFromUrl) {
 				$('#atrishawoo-label-order-id').val(orderFromUrl);
@@ -940,6 +1175,7 @@ final class AtrishaWoo_Admin {
 			if (presetFromUrl && window.AtrishaWooSku.labelPresets && window.AtrishaWooSku.labelPresets[presetFromUrl]) {
 				$('#atrishawoo-label-preset').val(presetFromUrl);
 				setLabelFormSettings(window.AtrishaWooSku.labelPresets[presetFromUrl].settings || {});
+				syncToolbarState();
 			}
 
 			$('#atrishawoo-label-preset').on('change', function(){
@@ -948,6 +1184,8 @@ final class AtrishaWoo_Admin {
 				var presets = window.AtrishaWooSku.labelPresets || {};
 				if (presets[pid] && presets[pid].settings) {
 					setLabelFormSettings(presets[pid].settings);
+					previewDirty = false;
+					syncToolbarState();
 					labelPreview();
 				}
 			});
@@ -973,6 +1211,7 @@ final class AtrishaWoo_Admin {
 				if (!oid) return;
 				$('#atrishawoo-label-order-id').val(oid);
 				$('#atrishawoo-label-order-selected').text('سفارش انتخاب‌شده: #' + oid);
+				previewDirty = false;
 				labelPreview();
 			});
 
@@ -1036,16 +1275,24 @@ final class AtrishaWoo_Admin {
 
 			var previewTimer = null;
 			function schedulePreview(){
-				if (previewTimer) {
-					clearTimeout(previewTimer);
+				if (previewDirty) {
+					applyPreviewStyles();
+					return;
 				}
-				previewTimer = setTimeout(function(){
-					labelPreview();
-				}, 250);
+				if (previewTimer) clearTimeout(previewTimer);
+				previewTimer = setTimeout(function(){ labelPreview(); }, 250);
 			}
 
-			$('#atrishawoo-label-width, #atrishawoo-label-height, #atrishawoo-label-padding, #atrishawoo-label-font, #atrishawoo-label-line-height, #atrishawoo-label-font-weight, #atrishawoo-label-font-style, #atrishawoo-label-word-spacing, #atrishawoo-label-letter-spacing, #atrishawoo-label-template').on('input change', schedulePreview);
+			$('#atrishawoo-label-font-family, #atrishawoo-label-width, #atrishawoo-label-height, #atrishawoo-label-padding, #atrishawoo-label-font, #atrishawoo-label-line-height, #atrishawoo-label-direction, #atrishawoo-label-text-align, #atrishawoo-label-font-weight, #atrishawoo-label-font-style, #atrishawoo-label-word-spacing, #atrishawoo-label-letter-spacing').on('input change', function(){
+				syncToolbarState();
+				schedulePreview();
+			});
+			$('#atrishawoo-label-template').on('input', function(){
+				previewDirty = false;
+				schedulePreview();
+			});
 
+			syncToolbarState();
 			labelPreview();
 		}
 	});

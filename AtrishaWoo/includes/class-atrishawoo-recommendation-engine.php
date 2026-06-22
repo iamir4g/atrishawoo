@@ -538,7 +538,10 @@ final class AtrishaWoo_Recommendation_Engine {
 		return array_values(array_unique($ids));
 	}
 
-	private static function find_previous_purchased_product_ids(WC_Order $order): array {
+	private static function find_previous_purchased_product_ids($order): array {
+		if (!is_object($order) || !is_a($order, 'WC_Order')) {
+			return [];
+		}
 		$customer_id = (int) $order->get_customer_id();
 		$billing_email = (string) $order->get_billing_email();
 		$date = $order->get_date_created();
